@@ -14,7 +14,8 @@ S.N = 32;
 S.h = tf/S.N;
 
 % car parameters
-S.l = 1;
+S.l = 1; % distance between axles
+S.circ_r = 0.5; % radius of circle centered on each axle for collision checking
 
 % cost function parameters
 S.Q = .0*diag([5, 5, 1, 1, 1]);
@@ -120,19 +121,22 @@ else
   Luu = S.h*S.R;
 end
 
-% quadratic penalty term
+% quadratic penalty term for collisions
 if isfield(S, 'os')
-  for i=1:length(S.os)
-    g = x(1:2) - S.os(i).p;
-    c = S.os(i).r - norm(g);
-    if c < 0
-      continue
-    end
+  for i=1:length(S.os) % for each obstacle
+    for j = 0:1 % for each collision checking circle (on each axle)
+        circ_center = [x(1) + j*S.l*cos(x(3)); x(2) + j*S.l*sin(x(3))];
+        g = circ_center - S.os(i).p;
+        c = (S.os(i).r + S.circ_r) - norm(g);
+        if c < 0
+         continue
+        end
     
-    L = L + S.ko/2*c^2;
-    v = g/norm(g);
-    Lx(1:2) = Lx(1:2) - S.ko*c*v;
-    Lxx(1:2,1:2) = Lxx(1:2,1:2) + S.ko*v*v';  % Gauss-Newton appox
+        L = L + S.ko/2*c^2;
+        v = g/norm(g);
+        Lx(1:2) = Lx(1:2) - S.ko*c*v;
+        Lxx(1:2,1:2) = Lxx(1:2,1:2) + S.ko*v*v';  % Gauss-Newton appox
+    end
   end
 end
 
