@@ -1,6 +1,13 @@
 function [dus, V, Vn, dV, a] = ddp(x0, us, S)
 % Second-order numerical optimal control. The code computes
 % the optimal control adjustment for a given dynamical system
+
+% Changelog:
+% * Added logic to check whether an updated u in the forward
+% pass exceeds bounds set by the system S
+% * In the same logic, updated how du was computed and thus
+% changed what dus was returned by ddp(). 
+
 %
 % params:
 % x0 - initial state
@@ -205,6 +212,29 @@ while dVm > 0
 
     du = a*c + D*dx;
     un = u + du;
+    
+    tmp = size(un, 1);
+    if isfield(S, 'umin')
+        if ~isempty(S.umin)
+            for i = 1:tmp
+                if un(i) < S.umin(i)
+                    un(i) = S.umin(i);
+                    du(i) = un(i) - u(i);
+                end
+            end
+        end
+    end
+    
+    if isfield(S, 'umax')
+        if ~isempty(S.umax)
+            for i = 1:tmp
+                if un(i) > S.umax(i)
+                    un(i) = S.umax(i);
+                    du(i) = un(i) - u(i);
+                end
+            end
+        end
+    end
     
     [Ln, Lx, Lxx, Lu, Luu] = S.L(k, xn, un, S);
     

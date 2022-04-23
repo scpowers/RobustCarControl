@@ -1,17 +1,18 @@
-function f = run()
+function f = run_exp()
 % Spencer Powers
 % Nonlinear Control and Planning in Robotics, Spring 2022
 % Final Project
+% Ideal trajectories generated via modified form of ddp_car_obst.m by Dr. Kobilarov
 
-% Ideal trajectories generated via modified form of ddp_car_obst.m by 
-% Dr. Kobilarov
+% Changelog:
+% * Added S.umin and S.umax fields holding max and min control values
 
 clc; clear variables; close all;
 
 %%%%%%%%%%%%%%%%%%%%%% Optimal Trajectory Generation %%%%%%%%%%%%%%%%%%%%%%
 % time horizon and segments
 tf = 20;
-S.N = 32;
+S.N = 80;
 S.h = tf/S.N;
 
 % car parameters
@@ -19,9 +20,9 @@ S.l = 1; % distance between axles
 S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 
 % cost function parameters
-S.Q = .0*diag([5, 5, 1, 1, 1]);
+S.Q = .0*diag([5, 5, 1, 1]);
 S.R = diag([1, 1]);
-S.Qf = diag([5, 5, 1, 1, 1]);
+S.Qf = diag([5, 5, 1, 1]);
 
 S.f = @car_f;
 S.L = @car_L;
@@ -30,10 +31,10 @@ S.mu = 0;
 
 % initial state
 % x = [p_x p_y theta phi v]
-x0 = [-5; -5; 0; 0; 0];
+x0 = [-5; -5; 0; 0];
 
 % desired state
-xd = [1; 1; 0; 0; 0];
+xd = [1; 1; 0; 0];
 S.xd = xd;
 
 % define obstacles
@@ -42,17 +43,18 @@ S.os(1).r = 1;
 S.ko = 1e4; % beta coeff in HW7 Q3 problem statement
 
 % add control bounds
-S.umin = [-.1, -.1];
-S.umax = [.1, .1];
+S.umin = [-.4, -.4];
+S.umax = [.4, .4];
 
 % initial control sequence
 us = zeros(2,S.N);
 
-xs = ddp_traj(x0, us, S); % generate traj using initial control sequence
+xs = ddp_traj(x0, us, S);
 
-J_init = ddp_cost(xs, us,  S) % print cost using initial control sequence
+J_init = ddp_cost(xs, us,  S)
 
 subplot(1,2,1)
+
 plot(xs(1,:), xs(2,:), '-b')
 hold on
 
@@ -85,12 +87,13 @@ for i=1:50
 end
 
 plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
+
+J = ddp_cost(xs, us, S) % final minimized cost
+
 xlabel('x')
 ylabel('y')
 
-J = ddp_cost(xs, us, S) % print final minimized cost
-
-% plot ideal controls
+% plot controls
 subplot(1,2,2)
 plot(0:S.h:tf-S.h, us(1,:),0:S.h:tf-S.h, us(2,:));
 xlabel('sec.')
@@ -99,7 +102,7 @@ legend('u_1','u_2')
 
 %%%%%%%%%%%%%%%%%%%%%%%% Tracking via Backstepping %%%%%%%%%%%%%%%%%%%%%%%%
 % say you're starting at some offset from the ideal x0
-x0_noisy = x0 + [0.1; 0.1; 0.1; 0.1; 0.1];
+x0_noisy = x0 + [0.1; 0.1; 0.1; 0.1];
 
 % can't just use ideal controls, as those assume you're starting from x0
 % but you can use the ideal trajectory for reference (to compute errors)
@@ -114,12 +117,24 @@ u_actual = zeros(size(us));
 
 x_actual(:,1) = x0_noisy; % start at noisy initial state
 for i=1:S.N
-    % compute required tracking control based on current actual state
-    u = car_ctrl(x_actual(:,i), S, i); 
-    % compute next state
-    x_actual(:, i+1) = S.f(i, x_actual(:,i), u, S); 
+    u = car_ctrl(x_actual(:,i), S, i); % compute tracking control
+    u_actual(:,i) = u;
+    x_actual(:, i+1) = S.f(i, x_actual(:,i), u, S); % compute next state
 end
 
+% compare the ideal and actual trajectories
+figure;
+plot(xs(1,:), xs(2,:), '--g'); % plot final trajectory
+hold on;
+plot(x_actual(1,:), x_actual(2,:), '-g'); % plot final trajectory
+
+% compare the ideal and actual controls
+figure;
+plot(0:S.h:tf-S.h, us(1,:), '--b');
+hold on;
+plot(0:S.h:tf-S.h, us(2,:), '--r');
+plot(0:S.h:tf-S.h, u_actual(1,:), '-b');
+plot(0:S.h:tf-S.h, u_actual(2,:), '-r');
 
 
 end
@@ -132,44 +147,43 @@ k2 = 1;
 
 % get info about the reference trajectory at this particular spot
 x_ref = S.xs(:,i);
-yd = x_ref(1:2); % get yd at this point in the trajectory
+u_ref = S.us(:,i);
+yd = x_ref(1:2); % get yd at this spot
 theta_ref = x_ref(3);
-delta_ref = x_ref(4);
-v_ref = x_ref(5);
+v_ref = x_ref(4);
+
+dyd = v_ref*[cos(theta_ref); sin(theta_ref)]; % from dynamics
+d2yd = [-v_ref^2*sin(theta_ref)/S.l, cos(theta_ref);
+     v_ref^2*cos(theta_ref)/S.l, sin(theta_ref)] * [tan(u_ref(1)); u_ref(2)];
 
 % get info about the current real state
 y = x(1:2);
 theta = x(3);
-delta = x(4);
-v = x(5);
+v = x(4);
 
-e = y - yd % check that the dimensions match
+% current velocity
+dy = v*[cos(theta); sin(theta)]; % from dynamics
 
-yd_dot = [v_ref*cos(theta_ref)*cos(delta_ref);
-          v_ref*sin(theta_ref)*cos(delta_ref)];
+% error states
+e = y - yd;
+z = -dyd + k1*e + dy;
+e_dot = dy - dyd;
 
-e_dot = [v*cos(theta)*cos(delta);
-         v*sin(theta)*cos(delta)] - yd_dot;
+% augmented inputs tmp =(tan(u1), u2)
+R = [-v^2*sin(theta)/S.l, cos(theta);
+     v^2*cos(theta)/S.l, sin(theta)];
+tmp = inv(R)*(-k2*z - e + d2yd - k1*e_dot);
+u = [atan(tmp(1)); tmp(2)];
 
-z = [v*cos(theta)*cos(delta);
-     v*sin(theta)*cos(delta)] - yd_dot + k1*e;
-
-A = [-v^2*sin(theta)*cos(delta)*cos(delta)/S.l;
-      v^2*cos(theta)*cos(delta)*cos(delta)/S.l];
-  
-A_ref = [-v_ref^2*sin(theta_ref)*cos(delta_ref)*cos(delta_ref)/S.l;
-      v_ref^2*cos(theta_ref)*cos(delta_ref)*cos(delta_ref)/S.l];
-
-R = [-v*cos(theta)*sin(delta) cos(theta)*cos(delta);
-     -v*sin(theta)*sin(delta) sin(theta)*cos(delta)];
- 
-R_ref = [-v_ref*cos(theta_ref)*sin(delta_ref) cos(theta_ref)*cos(delta_ref);
-     -v_ref*sin(theta_ref)*sin(delta_ref) sin(theta_ref)*cos(delta_ref)];
-
-u_ref = S.us(:,i);
-yd_ddot = A_ref + R_ref*u_ref;
-
-u = inv(R)*(-e + yd_ddot - k1*e_dot - A - k2*z);
+%restrict controls to limits
+for i=1:2
+    if u(i) > S.umax(i)
+        u(i) = S.umax(i);
+    elseif u(i) < S.umin(i)
+        u(i) = S.umin(i);
+    else
+    end
+end
 
 end
 
@@ -222,27 +236,21 @@ function [x, A, B] = car_f(k, x, u, S)
 
 dt = S.h;
 theta = x(3);
-phi = x(4);
-v = x(5);
+v = x(4);
 
-% partial x_t+1 / partial x
-A = [1 0 -dt*v*sin(theta)*cos(phi) -dt*v*cos(theta)*sin(phi) dt*cos(theta)*cos(phi);
-     0 1 dt*v*cos(theta)*cos(phi) -dt*v*sin(theta)*sin(phi) dt*sin(theta)*cos(phi);
-     0 0 1 dt*v*cos(phi)/S.l dt*sin(phi)/S.l;
-     0 0 0 1 0;
-     0 0 0 0 1];
+A = [1 0 -dt*v*sin(theta) dt*cos(theta);
+     0 1 dt*v*cos(theta) dt*sin(theta);
+     0 0 1 dt*tan(u(1))/S.l;
+     0 0 0 1];
 
-% partial x_t+1 / partial u
 B = [0 0;
      0 0;
-     0 0;
-     dt 0;
+     dt*v*sec(u(1))^2/S.l 0;
      0 dt];
 
-% x_t+1 = f(x_t, u_t)
-x = [x(1) + dt*v*cos(theta)*cos(phi);
-     x(2) + dt*v*sin(theta)*cos(phi);
-     theta + dt*v*sin(phi)/S.l;
-     phi + dt*u(1);
-     v + dt*u(2)];
+x = [x(1) + dt*v*cos(theta);
+     x(2) + dt*v*sin(theta);
+     x(3) + dt*v*tan(u(1))/S.l;
+     x(4) + dt*u(2)];
+    
 end
