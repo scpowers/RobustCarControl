@@ -12,7 +12,7 @@ clc; clear variables; close all;
 %%%%%%%%%%%%%%%%%%%%%% Optimal Trajectory Generation %%%%%%%%%%%%%%%%%%%%%%
 % time horizon and segments
 tf = 20;
-S.N = 80;
+S.N = 100;
 S.h = tf/S.N;
 
 % car parameters
@@ -22,7 +22,7 @@ S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 % cost function parameters
 S.Q = .0*diag([5, 5, 1, 1]);
 S.R = diag([1, 1]);
-S.Qf = diag([5, 5, 1, 1]);
+S.Qf = diag([5, 5, 2, 1]);
 
 S.f = @car_f;
 S.L = @car_L;
@@ -43,8 +43,9 @@ S.os(1).r = 1;
 S.ko = 1e4; % beta coeff in HW7 Q3 problem statement
 
 % add control bounds
-S.umin = [-.4, -.4];
-S.umax = [.4, .4];
+% u = [steering angle; forward acceleration]
+S.umin = [-pi/4, -.4];
+S.umax = [pi/4, .4];
 
 % initial control sequence
 us = zeros(2,S.N);
@@ -85,7 +86,7 @@ for i=1:50
 
   plot(xs(1,:), xs(2,:), '-b');
 end
-
+xs(:,end)
 plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
 
 J = ddp_cost(xs, us, S) % final minimized cost
@@ -118,6 +119,8 @@ u_actual = zeros(size(us));
 x_actual(:,1) = x0_noisy; % start at noisy initial state
 for i=1:S.N
     u = car_ctrl(x_actual(:,i), S, i); % compute tracking control
+    %k_noise = 0.05; % max magnitude of added control noise
+    %u = u + k_noise*rand(2,1);
     u_actual(:,i) = u;
     x_actual(:, i+1) = S.f(i, x_actual(:,i), u, S); % compute next state
 end
@@ -126,7 +129,7 @@ end
 figure;
 plot(xs(1,:), xs(2,:), '--g'); % plot final trajectory
 hold on;
-plot(x_actual(1,:), x_actual(2,:), '-g'); % plot final trajectory
+plot(x_actual(1,:), x_actual(2,:), '-k'); % plot final trajectory
 
 % compare the ideal and actual controls
 figure;
@@ -135,7 +138,7 @@ hold on;
 plot(0:S.h:tf-S.h, us(2,:), '--r');
 plot(0:S.h:tf-S.h, u_actual(1,:), '-b');
 plot(0:S.h:tf-S.h, u_actual(2,:), '-r');
-
+legend('u_{1,d}', 'u_{2,d}', 'u_{1,a}', 'u_{2,a}');
 
 end
 
