@@ -30,7 +30,7 @@ S.Lf = @car_Lf;
 S.mu = 0;
 
 % initial state
-% x = [p_x p_y theta phi v]
+% x = [p_x p_y theta v]
 x0 = [-5; -5; 0; 0];
 
 % desired state
@@ -117,7 +117,32 @@ x_actual = zeros(size(xs));
 u_actual = zeros(size(us));
 
 x_actual(:,1) = x0_noisy; % start at noisy initial state
-for i=1:S.N
+% first find the nearest state in the reference trajectory (probably
+% won't be the first anymore) and make sure that it's ahead of the noisy
+% initial state so we don't start by going backwards. Can do this by 
+% having the noisy initial state have some nonzero velocity vaguely pointed
+% in the right direction and checking the dot product of this velocity
+% vector and the vector from the noisy position to the reference trajectory
+% state. This dot product must be > 0 (roughly aligned)
+start_index = S.N;
+start_dist = norm(x0_noisy(1:2) - S.xs(1:2,S.N));
+x0_vel = x0_noisy(4)*[cos(x0_noisy(3)); sin(x0_noisy(3))];
+for i=1:S.N-1
+    tmp_dist = norm(x0_noisy(1:2) - S.xs(1:2,i));
+    vec_to_state = [S.xs(1,i) - x0_noisy(1); S.xs(2,i) - x0_noisy(2)];
+    tmp_check = dot(x0_vel, vec_to_state);
+    if tmp_dist < start_dist && tmp_check > 0
+        %disp('found a better starting match!')
+        start_index = i;
+        start_dist = tmp_dist;
+    end
+end
+
+x_actual(:,start_index) = x0_noisy; % hasn't moved until start_index
+
+% now actually simulate the perturbed system starting at the starting
+% index found above
+for i=start_index:S.N
     u = car_ctrl(x_actual(:,i), S, i); % compute tracking control
     %k_noise = 0.05; % max magnitude of added control noise
     %u = u + k_noise*rand(2,1);
@@ -129,7 +154,7 @@ end
 figure;
 plot(xs(1,:), xs(2,:), '--g'); % plot final trajectory
 hold on;
-plot(x_actual(1,:), x_actual(2,:), '-k'); % plot final trajectory
+plot(x_actual(1,start_index:end), x_actual(2,start_index:end), '-k'); % plot final trajectory
 
 % compare the ideal and actual controls
 figure;
