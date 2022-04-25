@@ -161,8 +161,9 @@ figure;
 plot(0:S.h:tf-S.h, us(1,:), '--b');
 hold on;
 plot(0:S.h:tf-S.h, us(2,:), '--r');
-plot(0:S.h:tf-S.h, u_actual(1,:), '-b');
-plot(0:S.h:tf-S.h, u_actual(2,:), '-r');
+t_vec = 0:S.h:tf-S.h;
+plot(t_vec(start_index:end), u_actual(1,start_index:end), '-b');
+plot(t_vec(start_index:end), u_actual(2,start_index:end), '-r');
 legend('u_{1,d}', 'u_{2,d}', 'u_{1,a}', 'u_{2,a}');
 
 end
