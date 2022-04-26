@@ -2,10 +2,8 @@ function f = run_exp2()
 % Spencer Powers
 % Nonlinear Control and Planning in Robotics, Spring 2022
 % Final Project
-% Ideal trajectories generated via modified form of ddp_car_obst.m by Dr. Kobilarov
-
-% Changelog:
-% * Added S.umin and S.umax fields holding max and min control values
+% Ideal trajectories generated via modified form of ddp_car_obst.m by 
+% Dr. Kobilarov
 
 clc; clear variables; close all;
 
@@ -21,13 +19,13 @@ S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 
 % first noise coefficient: realistically adding noise to tan(u1). So, since
 % I'm limiting u1 to +- pi/4, the worst case difference in tan(u1) if you
-% have a 5 deg drift while moving at 60 mph is tan(45) - tan(40) = 0.16...
+% have a 1 deg drift while moving at 60 mph is tan(45) - tan(44) = 0.16...
 % if you're moving slower and at a lower steering angle then the difference
 % will be smaller, so this is an upper bound.
 % second noise coefficient: adding noise directly to u2, so if you are
 % moving at 60 mph and wind drops your acceleration by 0.5 m/s, then the
 % upper bound coefficient is 0.0186
-S.k_noise = [0.16; 0.0186];
+S.k_noise = [0.034; 0.0186];
 S.k_tot = norm(S.k_noise);
 
 % cost function parameters
