@@ -18,11 +18,12 @@ S.h = tf/S.N;
 % car parameters
 S.l = 1; % distance between axles
 S.circ_r = 0.5; %radius of circle centered on each axle for collision model
+S.k_noise = 0.01; % ||delta|| <= k_noise*|velocity|
 
 % cost function parameters
 S.Q = .0*diag([5, 5, 1, 1]);
-S.R = diag([1, 1]);
-S.Qf = diag([5, 5, 2, 1]);
+S.R = 2*diag([1, 1]);
+S.Qf = 1*diag([5, 5, 5, 5]);
 
 S.f = @car_f;
 S.L = @car_L;
@@ -34,7 +35,7 @@ S.mu = 0;
 x0 = [-5; -5; 0; 0];
 
 % desired state
-xd = [1; 1; 0; 0];
+xd = [2; 1; 0; 0];
 S.xd = xd;
 
 % define obstacles
@@ -86,7 +87,6 @@ for i=1:50
 
   plot(xs(1,:), xs(2,:), '-b');
 end
-xs(:,end)
 plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
 
 J = ddp_cost(xs, us, S) % final minimized cost
@@ -132,7 +132,6 @@ for i=1:S.N-1
     vec_to_state = [S.xs(1,i) - x0_noisy(1); S.xs(2,i) - x0_noisy(2)];
     tmp_check = dot(x0_vel, vec_to_state);
     if tmp_dist < start_dist && tmp_check > 0
-        %disp('found a better starting match!')
         start_index = i;
         start_dist = tmp_dist;
     end
@@ -144,11 +143,19 @@ x_actual(:,start_index) = x0_noisy; % hasn't moved until start_index
 % index found above
 for i=start_index:S.N
     u = car_ctrl(x_actual(:,i), S, i); % compute tracking control
-    %k_noise = 0.05; % max magnitude of added control noise
-    %u = u + k_noise*rand(2,1);
+    % add noise proportional to the car's velocity
+    % such that ||delta|| <= k_noise*abs(velocity)
+%     k_u1_vel_noise = 0.005;
+%     k_u2_vel_noise = 0.005; 
+%     u_noise = [k_u1_vel_noise; k_u2_vel_noise] * abs(x_actual(4));
+%     u = u + u_noise;
+    % update storage matrices
     u_actual(:,i) = u;
     x_actual(:, i+1) = S.f(i, x_actual(:,i), u, S); % compute next state
 end
+% show state error at very end
+xs(:,end) - x_actual(:,end)
+
 
 % compare the ideal and actual trajectories
 figure;
@@ -171,6 +178,7 @@ end
 
 % feedback control law derived via backstepping
 function u = car_ctrl(x, S, i)
+%%%%%%%%%%% compute nominal (noiseless) control (psi in notes) %%%%%%%%%%%
 k1 = 1;
 k2 = 1;
 
@@ -198,13 +206,30 @@ e = y - yd;
 z = -dyd + k1*e + dy;
 e_dot = dy - dyd;
 
-% augmented inputs tmp =(tan(u1), u2)
+% augmented inputs u_aug =(tan(u1), u2)
 R = [-v^2*sin(theta)/S.l, cos(theta);
      v^2*cos(theta)/S.l, sin(theta)];
-tmp = inv(R)*(-k2*z - e + d2yd - k1*e_dot);
-u = [atan(tmp(1)); tmp(2)];
+u_aug = inv(R)*(-k2*z - e + d2yd - k1*e_dot);
 
-%restrict controls to limits
+%%%%%%%%%%% TODO: add disturbance rejection term v %%%%%%%%%%%
+
+% w1 = v/S.l * ( (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(-v*sin(theta)) + ...
+%     (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(v*cos(theta)));
+% 
+% w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(cos(theta)) + ...
+%     (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(sin(theta));
+% 
+% w = [w1; w2];
+% 
+% k_eta = 1*S.k_noise; % must be at least k_noise, could be greater
+% eta = k_eta*abs(v);
+% u_v = (-eta/norm(w)) * w;
+% 
+% u_aug = u_aug + u_v; % add disturbance rejection term
+
+% convert from u_aug to u
+u = [atan(u_aug(1)); u_aug(2)];
+% restrict controls to limits
 for i=1:2
     if u(i) > S.umax(i)
         u(i) = S.umax(i);
