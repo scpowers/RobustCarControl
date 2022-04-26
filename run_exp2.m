@@ -1,4 +1,4 @@
-function f = run_exp()
+function f = run_exp2()
 % Spencer Powers
 % Nonlinear Control and Planning in Robotics, Spring 2022
 % Final Project
@@ -18,7 +18,17 @@ S.h = tf/S.N;
 % car parameters
 S.l = 1; % distance between axles
 S.circ_r = 0.5; %radius of circle centered on each axle for collision model
-S.k_noise = [0.05; 0.001]; % ||delta|| <= ||k_noise||*|velocity|
+
+% first noise coefficient: realistically adding noise to tan(u1). So, since
+% I'm limiting u1 to +- pi/4, the worst case difference in tan(u1) if you
+% have a 5 deg drift while moving at 60 mph is tan(45) - tan(40) = 0.16...
+% if you're moving slower and at a lower steering angle then the difference
+% will be smaller, so this is an upper bound.
+% second noise coefficient: adding noise directly to u2, so if you are
+% moving at 60 mph and wind drops your acceleration by 0.5 m/s, then the
+% upper bound coefficient is 0.0186
+S.k_noise = [0.16; 0.0186];
+S.k_tot = norm(S.k_noise);
 
 % cost function parameters
 S.Q = .0*diag([5, 5, 1, 1]);
@@ -144,13 +154,12 @@ x_actual(:,start_index) = x0_noisy; % hasn't moved until start_index
 for i=start_index:S.N
     u = car_ctrl(x_actual(:,i), S, i); % compute tracking control
     % add noise proportional to the car's velocity
-    % such that ||delta|| <= k_noise*abs(velocity)
-    k_u1_vel_noise = 0.05;
-    k_u2_vel_noise = 0.001; 
-    u_noise = abs(x_actual(4)) * ([-k_u1_vel_noise; -k_u2_vel_noise] + ...
-        2*[k_u1_vel_noise, 0; 0, k_u2_vel_noise] * rand(2,1));
-    disp('u_noise')
-    disp(u_noise)
+    % such that ||delta|| <= S.k_tot*abs(velocity)
+    % NOTE: u_noise = [tan(u1_noise); u2_noise]...not directly adding to u1
+    % general form: |v|*(random uniform number in [-k_i, k_i])
+    u_noise = abs(x_actual(4)) * ([-S.k_noise(1); -S.k_noise(2)] + ...
+        2*[S.k_noise(1), 0; 0, S.k_noise(2)] * rand(2,1));
+    u_noise = [atan(u_noise(1)); u_noise(2)]; % switch back to [u1;u2]
     u = u + u_noise;
     % update storage matrices
     u_actual(:,i) = u;
@@ -216,29 +225,20 @@ u_aug = inv(R)*(-k2*z - e + d2yd - k1*e_dot);
 
 %%%%%%%%%%% TODO: add disturbance rejection term v %%%%%%%%%%%
 
-% w1 = v/S.l * ( (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(-v*sin(theta)) + ...
-%     (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(v*cos(theta))  );
-% 
-% w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(cos(theta)) + ...
-%     (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(sin(theta));
-% 
-% w = [w1; w2];
-% 
-% % must be at least k_noise, could be greater
-% % but recall that you're adding noise with magnitude less than or equal to
-% % k_noise*|velocity| to controls [u1; u2] not [tan(u1); u2], so really the magnitude
-% % is different here...noise added to the first term must be adjusted to
-% % account for the fact that it's being added to tan(u1) instead of u1
-% k_eta = 1*norm([tan(S.k_noise(1)); S.k_noise(2)]); 
-% eta = k_eta*abs(v);
-% u_v = (-eta/norm(w)) * w;
-% 
-% %disp(100*u_v(1)/u_aug(1))
-% %disp(100*u_v(2)/u_aug(2))
-% disp('u_v')
-% disp(u_v)
-% 
-% u_aug = u_aug + u_v; % add disturbance rejection term
+w1 = v/S.l * ( (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(-v*sin(theta)) + ...
+    (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(v*cos(theta))  );
+
+w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(cos(theta)) + ...
+    (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(sin(theta));
+
+w = [w1; w2];
+
+% must be at least k_noise, could be greater
+k_eta = 1*S.k_tot; 
+eta = k_eta*abs(v);
+u_v = (-eta/norm(w)) * w;
+
+u_aug = u_aug + u_v; % add disturbance rejection term
 
 % convert from u_aug to u
 u = [atan(u_aug(1)); u_aug(2)];
