@@ -145,10 +145,11 @@ for i=start_index:S.N
     u = car_ctrl(x_actual(:,i), S, i); % compute tracking control
     % add noise proportional to the car's velocity
     % such that ||delta|| <= k_noise*abs(velocity)
-%     k_u1_vel_noise = 0.005;
-%     k_u2_vel_noise = 0.005; 
-%     u_noise = [k_u1_vel_noise; k_u2_vel_noise] * abs(x_actual(4));
-%     u = u + u_noise;
+    k_u1_vel_noise = 0.05;
+    k_u2_vel_noise = 0.05; 
+    u_noise = abs(x_actual(4)) * ([-k_u1_vel_noise; -k_u2_vel_noise] + ...
+        2*[k_u1_vel_noise, 0; 0, k_u2_vel_noise] * rand(2,1));
+    u = u + u_noise;
     % update storage matrices
     u_actual(:,i) = u;
     x_actual(:, i+1) = S.f(i, x_actual(:,i), u, S); % compute next state
