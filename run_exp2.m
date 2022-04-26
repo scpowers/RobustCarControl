@@ -17,15 +17,17 @@ S.h = tf/S.N;
 S.l = 1; % distance between axles
 S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 
+% generally: ||noise|| <= S.k_tot*|velocity|
 % first noise coefficient: realistically adding noise to tan(u1). So, since
 % I'm limiting u1 to +- pi/4, the worst case difference in tan(u1) if you
-% have a 1 deg drift while moving at 60 mph is tan(45) - tan(44) = 0.16...
+% have a 3 deg drift while moving at 60 mph is tan(45) - tan(41) = 0.099...
+% to actually get the coefficient you'd divide 0.034 by 60 mph but in m/s
 % if you're moving slower and at a lower steering angle then the difference
 % will be smaller, so this is an upper bound.
 % second noise coefficient: adding noise directly to u2, so if you are
 % moving at 60 mph and wind drops your acceleration by 0.5 m/s, then the
 % upper bound coefficient is 0.0186
-S.k_noise = [0.034; 0.0186];
+S.k_noise = [0.0037; 0.0186];
 S.k_tot = norm(S.k_noise);
 
 % cost function parameters
