@@ -17,27 +17,28 @@ S.h = tf/S.N;
 S.l = 1; % distance between axles
 S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 
-% generally: ||noise|| <= S.k_tot*|velocity|
+% generally: ||added noise|| <= S.k_tot*|velocity|
 % first noise coefficient: realistically adding noise to tan(u1). So, since
 % I'm limiting u1 to +- pi/4, the worst case difference in tan(u1) if you
-% have a 3 deg drift while moving at 60 mph is tan(45) - tan(41) = 0.099...
-% to actually get the coefficient you'd divide 0.034 by 60 mph but in m/s
+% have a 3 deg drift while moving at 60 mph is tan(45) - tan(42) = 0.099
+% because of the increasingly steep nature of the tangent function...but
+% to actually get the coefficient you'd divide 0.099 by 60 mph but in m/s
 % if you're moving slower and at a lower steering angle then the difference
 % will be smaller, so this is an upper bound.
 % second noise coefficient: adding noise directly to u2, so if you are
-% moving at 60 mph and wind drops your acceleration by 0.5 m/s, then the
-% upper bound coefficient is 0.0186
+% moving at 60 mph and wind drops your acceleration by 0.5 m/s^2, then the
+% upper bound coefficient is 0.0186 (because of conversion from mph to m/s)
 S.k_noise = [0.0037; 0.0186];
 S.k_tot = norm(S.k_noise);
 
 % cost function parameters
-S.Q = .0*diag([5, 5, 1, 1]);
-S.R = 2*diag([1, 1]);
-S.Qf = 1*diag([5, 5, 5, 5]);
+S.Q = .0*diag([5, 5, 1, 1]); % no accrued cost from states over trajectory
+S.R = 2*diag([1, 1]); % penalties on controls over the trajectory
+S.Qf = 1*diag([5, 5, 5, 5]); % terminal cost on final state errors
 
-S.f = @car_f;
-S.L = @car_L;
-S.Lf = @car_Lf;
+S.f = @car_f; % car dynamics 
+S.L = @car_L; % car cost
+S.Lf = @car_Lf; % car terminal cost
 S.mu = 0;
 
 % initial state
@@ -51,7 +52,7 @@ S.xd = xd;
 % define obstacles
 S.os(1).p = [-2.5;-2.5];
 S.os(1).r = 1;
-S.ko = 1e4; % beta coeff in HW7 Q3 problem statement
+S.ko = 1e4; % coeff on cost associated with obstacle collision
 
 % add control bounds
 % u = [steering angle; forward acceleration]
@@ -103,12 +104,14 @@ J = ddp_cost(xs, us, S) % final minimized cost
 
 xlabel('x')
 ylabel('y')
+title('Trajectory Generation')
 
 % plot controls
 subplot(1,2,2)
 plot(0:S.h:tf-S.h, us(1,:),0:S.h:tf-S.h, us(2,:));
 xlabel('sec.')
 legend('u_1','u_2')
+title('Ideal Controls')
 
 
 %%%%%%%%%%%%%%%%%%%%%%%% Tracking via Backstepping %%%%%%%%%%%%%%%%%%%%%%%%
@@ -165,15 +168,48 @@ for i=start_index:S.N
     u_actual(:,i) = u;
     x_actual(:, i+1) = S.f(i, x_actual(:,i), u, S); % compute next state
 end
-% show state error at very end
-xs(:,end) - x_actual(:,end)
+
+% compute tracking error and dist to nearest obstacle over time 
+% for performance plots
+num_slots = size(x_actual,2) - start_index;
+tracking_error = zeros(1, num_slots);
+dist_to_obs = zeros(1, num_slots);
+for i=0:(num_slots-1)
+    % positional error computation
+    dist = norm(x_actual(1:2,i+start_index) - S.xs(1:2,i+start_index));
+    tracking_error(i+1) = dist;
+    
+    % nearest dist to obstacle computation
+    % right now only working with one obstacle
+    % check both circles centered at the axles
+    dist = 1e6; % arbitrarily large starting dist, will be replaced in loop
+    x = x_actual(1:3, i+start_index);
+    if isfield(S, 'os')
+        for k=1:length(S.os) % for each obstacle
+            for j=0:1
+                circ_center = [x(1) + j*S.l*cos(x(3)); x(2) + j*S.l*sin(x(3))];
+                g = circ_center - S.os(k).p;
+                c = norm(g) - (S.os(k).r + S.circ_r);
+                if (c < dist)
+                    dist = c; % update closest computed distance to obstacle
+                end
+            end
+        end
+    end
+    dist_to_obs(i+1) = dist;
+end
 
 
 % compare the ideal and actual trajectories
 figure;
 plot(xs(1,:), xs(2,:), '--g'); % plot final trajectory
 hold on;
-plot(x_actual(1,start_index:end), x_actual(2,start_index:end), '-k'); % plot final trajectory
+% plot final trajectory
+plot(x_actual(1,start_index:end), x_actual(2,start_index:end), '-k'); 
+xlabel('x')
+ylabel('y')
+legend('Ideal Trajectory', 'Actual Trajectory', 'Location', 'northwest');
+title('Ideal vs. Actual Trajectory')
 
 % compare the ideal and actual controls
 figure;
@@ -184,6 +220,23 @@ t_vec = 0:S.h:tf-S.h;
 plot(t_vec(start_index:end), u_actual(1,start_index:end), '-b');
 plot(t_vec(start_index:end), u_actual(2,start_index:end), '-r');
 legend('u_{1,d}', 'u_{2,d}', 'u_{1,a}', 'u_{2,a}');
+xlabel('t')
+ylabel('u')
+title('Ideal vs. Actual Controls')
+
+% plot tracking error over time
+figure;
+plot(t_vec(start_index:end), tracking_error);
+xlabel('t')
+ylabel('e')
+title('Tracking Error over Time')
+
+% plot nearest distance to obstacle over time
+figure;
+plot(t_vec(start_index:end), dist_to_obs);
+xlabel('t')
+ylabel('|d_{obs}|')
+title('Distance to Nearest Obstacle over Time')
 
 end
 
@@ -203,7 +256,7 @@ v_ref = x_ref(4);
 
 dyd = v_ref*[cos(theta_ref); sin(theta_ref)]; % from dynamics
 d2yd = [-v_ref^2*sin(theta_ref)/S.l, cos(theta_ref);
-     v_ref^2*cos(theta_ref)/S.l, sin(theta_ref)] * [tan(u_ref(1)); u_ref(2)];
+     v_ref^2*cos(theta_ref)/S.l, sin(theta_ref)]*[tan(u_ref(1)); u_ref(2)];
 
 % get info about the current real state
 y = x(1:2);
@@ -225,15 +278,17 @@ u_aug = inv(R)*(-k2*z - e + d2yd - k1*e_dot);
 
 %%%%%%%%%%% TODO: add disturbance rejection term v %%%%%%%%%%%
 
-w1 = v/S.l * ( (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(-v*sin(theta)) + ...
-    (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(v*cos(theta))  );
+w1 = v/S.l * ( (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + ...
+    v*cos(theta))*(-v*sin(theta)) + (k1*(x(2)-x_ref(2)) - ...
+    v_ref*sin(theta_ref) + v*sin(theta))*(v*cos(theta))  );
 
-w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + v*cos(theta))*(cos(theta)) + ...
-    (k1*(x(2)-x_ref(2)) - v_ref*sin(theta_ref) + v*sin(theta))*(sin(theta));
+w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + ...
+    v*cos(theta))*(cos(theta)) + (k1*(x(2)-x_ref(2)) - ...
+    v_ref*sin(theta_ref) + v*sin(theta))*(sin(theta));
 
 w = [w1; w2];
 
-% must be at least k_noise, could be greater
+% k_eta must be at least k_noise, could be greater
 k_eta = 1*S.k_tot; 
 eta = k_eta*abs(v);
 u_v = (-eta/norm(w)) * w;
@@ -242,6 +297,7 @@ u_aug = u_aug + u_v; % add disturbance rejection term
 
 % convert from u_aug to u
 u = [atan(u_aug(1)); u_aug(2)];
+
 % restrict controls to limits
 for i=1:2
     if u(i) > S.umax(i)
@@ -258,19 +314,19 @@ end
 function [L, Lx, Lxx, Lu, Luu] = car_L(k, x, u, S)
 % car cost (just standard quadratic cost)
 
-if (k == S.N+1)
-  if isfield(S, 'xd')
+if (k == S.N+1) % if you're at the end of the trajectory, get terminal cost
+  if isfield(S, 'xd') % if a desired final state is specified, use error
         xfError = x - S.xd; 
   else
-        xfError = x;
+        xfError = x; % else, the origin is the implied final desired state
   end
-  L = xfError'*S.Qf*xfError/2;
+  L = xfError'*S.Qf*xfError/2; % standard quadratic error
   Lx = S.Qf*xfError;
   Lxx = S.Qf;
   Lu = [];
   Luu = [];
 else
-  L = S.h/2*(x'*S.Q*x + u'*S.R*u);
+  L = S.h/2*(x'*S.Q*x + u'*S.R*u); % else, accumulate running cost
   Lx = S.h*S.Q*x;
   Lxx = S.h*S.Q;
   Lu = S.h*S.R*u;
