@@ -47,7 +47,7 @@ S.mu = 0;
 
 % initial state
 % x = [p_x p_y theta v]
-x0 = [-8; -4; 0; 0];
+x0 = [-6; -4; 0; 0];
 
 % desired state
 xd = [5; -1; 0; 0];
@@ -63,10 +63,6 @@ S.os(1).r = 1;
 %S.ez(1).sign = ">=";
 %S.ez(2).coeffs = [-0.5; 1; -7.5];
 %S.ez(2).sign = "<=";
-
-% define horizontal boundary lines of exclusion zones
-%S.hez(1).y = -5;
-%S.hez(1).sign = ">=";
 
 S.ko = 1e4; % coeff on cost associated with obstacle collision
 
@@ -443,44 +439,6 @@ if isfield(S, 'ez')
             if c < 0 % not enough clearance
                 satisfied = false;
             end
-            
-        end
-        
-        if satisfied == true
-         continue
-        end
-        
-        % converting back to positive value
-        c = -c;
-    
-        L = L + S.ko/2*c^2;
-        v = g/norm(g);
-        Lx(1:2) = Lx(1:2) - S.ko*c*v;
-        Lxx(1:2,1:2) = Lxx(1:2,1:2) + S.ko*v*v';  % Gauss-Newton appox
-    end
-  end
-end
-
-% quadratic penalty term for horizontal exclusion zone violations
-if isfield(S, 'hez')
-  for i=1:length(S.hez) % for each obstacle
-    for j = 0:1 % for each collision checking circle (on each axle)
-        circ_center = [x(1) + j*S.l*cos(x(3)); x(2) + j*S.l*sin(x(3))];
-              
-        satisfied = true;
-        
-        if S.hez(i).sign == ">=" % saying car must be above this line
-            
-            delta_y = circ_center(2) - S.hez(i).y;
-            c = delta_y - S.circ_r;
-            % need a g vec for error computation (from boundary to circ)
-            g = delta_y*[0;1]; % normal dist * gradient of boundary
-            
-            if c < 0 % not enough clearance
-                satisfied = false;
-            end
-        else % saying car must be below this line
-            % TODO
             
         end
         
