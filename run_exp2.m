@@ -50,7 +50,7 @@ S.mu = 0;
 x0 = [-8; -4; 0; 0];
 
 % desired state
-xd = [5; 1; 0; 0];
+xd = [5; -1; 0; 0];
 S.xd = xd;
 
 % define obstacles
