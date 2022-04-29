@@ -28,7 +28,11 @@ S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 % second noise coefficient: adding noise directly to u2, so if you are
 % moving at 60 mph and wind drops your acceleration by 0.5 m/s^2, then the
 % upper bound coefficient is 0.0186 (because of conversion from mph to m/s)
-S.k_noise = [0.0037; 0.0186];
+max_drift_deg = 3; % max noise in u1 (in degrees) at 60 mph or 26.8224 m/s
+max_drift_acc = 0.5; % max noise in u2 at 60 mph or 26.8224 m/s
+k_noise_u1 = (tand(45) - tand(45-max_drift_deg)) / 26.8224;
+k_noise_u2 = max_drift_acc / 26.8224;
+S.k_noise = [k_noise_u1; k_noise_u2];
 S.k_tot = norm(S.k_noise);
 
 % cost function parameters
