@@ -47,7 +47,7 @@ S.mu = 0;
 
 % initial state
 % x = [p_x p_y theta v]
-x0 = [-5; -5; 0; 0];
+x0 = [-8; -4; 0; 0];
 
 % desired state
 xd = [5; 1; 0; 0];
@@ -56,6 +56,12 @@ S.xd = xd;
 % define obstacles
 S.os(1).p = [-2;-2.5];
 S.os(1).r = 1;
+
+% define boundary lines of exclusion zones
+% takes the form [x, y, 1]*[coeffs] {sign} 0
+%S.ez(1).coeffs = [-0.5; 1; 7.5];
+%S.ez(1).sign = ">=";
+
 S.ko = 1e4; % coeff on cost associated with obstacle collision
 
 % add control bounds
@@ -104,11 +110,17 @@ for i=1:50
 end
 plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
 
-J = ddp_cost(xs, us, S) % final minimized cost
-
+% plot exclusion zone boundary
+if isfield(S, 'ez')
+    plot([xs(1,1), xs(1,end)],[ -[S.ez(1).coeffs(1), ...
+        S.ez(1).coeffs(3)]*[xs(1,1);1], -[S.ez(1).coeffs(1), ...
+        S.ez(1).coeffs(3)]*[xs(1,end);1]   ], '--r');
+end
 xlabel('x')
 ylabel('y')
 title('Trajectory Generation')
+
+J = ddp_cost(xs, us, S) % final minimized cost
 
 % plot controls
 subplot(1,2,2)
@@ -221,7 +233,7 @@ Y = [x_actual(2,start_index);
     x_actual(2, end);
     x_actual(2,end) + S.l*sin(x_actual(3,end))];
 R = S.circ_r*ones(4,1);
-viscircles([X Y], R, 'Color', 'k');
+viscircles([X Y], R, 'Color', 'k', 'LineStyle', '--');
 
 % just drawing circular obstacles
 if isfield(S, 'os')
@@ -305,7 +317,7 @@ R = [-v^2*sin(theta)/S.l, cos(theta);
      v^2*cos(theta)/S.l, sin(theta)];
 u_aug = inv(R)*(-k2*z - e + d2yd - k1*e_dot);
 
-%%%%%%%%%%% TODO: add disturbance rejection term v %%%%%%%%%%%
+%%%%%%%%%%% computing disturbance rejection term v %%%%%%%%%%%
 
 w1 = v/S.l * ( (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + ...
     v*cos(theta))*(-v*sin(theta)) + (k1*(x(2)-x_ref(2)) - ...
@@ -380,6 +392,44 @@ if isfield(S, 'os')
     end
   end
 end
+
+% quadratic penalty term for exclusion zone violations
+if isfield(S, 'ez')
+  for i=1:length(S.ez) % for each obstacle
+    for j = 0:1 % for each collision checking circle (on each axle)
+        circ_center = [x(1) + j*S.l*cos(x(3)); x(2) + j*S.l*sin(x(3))];
+              
+        satisfied = true;
+        
+        if S.ez(i).sign == ">=" % saying car must be above this line
+            theta_tmp = atan2(-S.ez(i).coeffs(1), S.ez(i).coeffs(2));
+            alpha_tmp = pi/2 - theta_tmp;
+            delta_y = circ_center(2) - (-S.ez(i).coeffs(1)*circ_center(1) - ...
+                S.ez(i).coeffs(3));
+            dist = delta_y*sin(alpha_tmp);
+            c = dist - S.circ_r;
+            if c < 0 % not enough clearance
+                satisfied = false;
+            end
+        else % saying car must be below this line
+            % TODO
+        end
+        
+        if satisfied == true
+         continue
+        end
+        
+        % converting back to positive value
+        c = -c;
+    
+        L = L + S.ko/2*c^2;
+        v = g/norm(g);
+        Lx(1:2) = Lx(1:2) - S.ko*c*v;
+        Lxx(1:2,1:2) = Lxx(1:2,1:2) + S.ko*v*v';  % Gauss-Newton appox
+    end
+  end
+end
+
 end
 
 
