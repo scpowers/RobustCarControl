@@ -37,8 +37,8 @@ S.k_tot = norm(S.k_noise);
 
 % cost function parameters
 S.Q = .0*diag([5, 5, 1, 1]); % no accrued cost from states over trajectory
-S.R = 2*diag([1, 1]); % penalties on controls over the trajectory
-S.Qf = 1*diag([5, 5, 5, 5]); % terminal cost on final state errors
+S.R = 4*diag([1, 1]); % penalties on controls over the trajectory
+S.Qf = 10*diag([5, 5, 5, 5]); % terminal cost on final state errors
 
 S.f = @car_f; % car dynamics 
 S.L = @car_L; % car cost
@@ -54,13 +54,19 @@ xd = [5; 1; 0; 0];
 S.xd = xd;
 
 % define obstacles
-S.os(1).p = [-2;-2.5];
+S.os(1).p = [1.5;-2.5];
 S.os(1).r = 1;
 
 % define boundary lines of exclusion zones
 % takes the form [x, y, 1]*[coeffs] {sign} 0
-%S.ez(1).coeffs = [-0.5; 1; 7.5];
+%S.ez(1).coeffs = [-0.3; 1; 5.5];
 %S.ez(1).sign = ">=";
+%S.ez(2).coeffs = [-0.5; 1; -7.5];
+%S.ez(2).sign = "<=";
+
+% define horizontal boundary lines of exclusion zones
+%S.hez(1).y = -5;
+%S.hez(1).sign = ">=";
 
 S.ko = 1e4; % coeff on cost associated with obstacle collision
 
@@ -95,6 +101,7 @@ end
 
 S.a = 1;
 
+% calling 50 iterations of DDP to optimize the trajectory
 for i=1:50
   [dus, V, Vn, dV, a] = ddp(x0, us, S);
 
@@ -112,9 +119,17 @@ plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
 
 % plot exclusion zone boundary
 if isfield(S, 'ez')
-    plot([xs(1,1), xs(1,end)],[ -[S.ez(1).coeffs(1), ...
-        S.ez(1).coeffs(3)]*[xs(1,1);1], -[S.ez(1).coeffs(1), ...
-        S.ez(1).coeffs(3)]*[xs(1,end);1]   ], '--r');
+    for i=1:length(S.ez)
+        plot([xs(1,1), xs(1,end)],[ -[S.ez(i).coeffs(1), ...
+            S.ez(i).coeffs(3)]*[xs(1,1);1], -[S.ez(i).coeffs(1), ...
+            S.ez(i).coeffs(3)]*[xs(1,end);1]   ], '--r');
+    end
+end
+% plot horizontal exclusion zone boundary
+if isfield(S, 'hez')
+    for i=1:length(S.hez)
+        plot([xs(1,1); xs(1,end)], S.hez(i).y*ones(2,1), '--r');
+    end
 end
 xlabel('x')
 ylabel('y')
@@ -408,11 +423,65 @@ if isfield(S, 'ez')
                 S.ez(i).coeffs(3));
             dist = delta_y*sin(alpha_tmp);
             c = dist - S.circ_r;
+            % need a g vec for error computation (from boundary to circ)
+            g = dist*S.ez(i).coeffs(1:2); % normal dist * gradient of boundary
+            
+            if c < 0 % not enough clearance
+                satisfied = false;
+            end
+        else % saying car must be below this line
+            
+            theta_tmp = atan2(-S.ez(i).coeffs(1), S.ez(i).coeffs(2));
+            alpha_tmp = pi/2 - theta_tmp;
+            delta_y = (-S.ez(i).coeffs(1)*circ_center(1) - ...
+                S.ez(i).coeffs(3)) - circ_center(2);
+            dist = delta_y*sin(alpha_tmp);
+            c = dist - S.circ_r;
+            % need a g vec for error computation (from boundary to circ)
+            g = -dist*S.ez(i).coeffs(1:2); % -normal dist * gradient of boundary
+            
+            if c < 0 % not enough clearance
+                satisfied = false;
+            end
+            
+        end
+        
+        if satisfied == true
+         continue
+        end
+        
+        % converting back to positive value
+        c = -c;
+    
+        L = L + S.ko/2*c^2;
+        v = g/norm(g);
+        Lx(1:2) = Lx(1:2) - S.ko*c*v;
+        Lxx(1:2,1:2) = Lxx(1:2,1:2) + S.ko*v*v';  % Gauss-Newton appox
+    end
+  end
+end
+
+% quadratic penalty term for horizontal exclusion zone violations
+if isfield(S, 'hez')
+  for i=1:length(S.hez) % for each obstacle
+    for j = 0:1 % for each collision checking circle (on each axle)
+        circ_center = [x(1) + j*S.l*cos(x(3)); x(2) + j*S.l*sin(x(3))];
+              
+        satisfied = true;
+        
+        if S.hez(i).sign == ">=" % saying car must be above this line
+            
+            delta_y = circ_center(2) - S.hez(i).y;
+            c = delta_y - S.circ_r;
+            % need a g vec for error computation (from boundary to circ)
+            g = delta_y*[0;1]; % normal dist * gradient of boundary
+            
             if c < 0 % not enough clearance
                 satisfied = false;
             end
         else % saying car must be below this line
             % TODO
+            
         end
         
         if satisfied == true
