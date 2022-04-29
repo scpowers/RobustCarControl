@@ -50,18 +50,18 @@ S.mu = 0;
 x0 = [-5; -5; 0; 0];
 
 % desired state
-xd = [2; 1; 0; 0];
+xd = [5; 1; 0; 0];
 S.xd = xd;
 
 % define obstacles
-S.os(1).p = [-2.5;-2.5];
+S.os(1).p = [-2;-2.5];
 S.os(1).r = 1;
 S.ko = 1e4; % coeff on cost associated with obstacle collision
 
 % add control bounds
 % u = [steering angle; forward acceleration]
-S.umin = [-pi/4, -.4];
-S.umax = [pi/4, .4];
+S.umin = [-pi/4, -1];
+S.umax = [pi/4, 1];
 
 % initial control sequence
 us = zeros(2,S.N);
@@ -210,10 +210,35 @@ plot(xs(1,:), xs(2,:), '--g'); % plot final trajectory
 hold on;
 % plot final trajectory
 plot(x_actual(1,start_index:end), x_actual(2,start_index:end), '-k'); 
+
+% show axle circles at start and end
+X = [x_actual(1,start_index); 
+    x_actual(1,start_index) + S.l*cos(x_actual(3,start_index));
+    x_actual(1, end);
+    x_actual(1,end) + S.l*cos(x_actual(3,end))];
+Y = [x_actual(2,start_index); 
+    x_actual(2,start_index) + S.l*sin(x_actual(3,start_index));
+    x_actual(2, end);
+    x_actual(2,end) + S.l*sin(x_actual(3,end))];
+R = S.circ_r*ones(4,1);
+viscircles([X Y], R, 'Color', 'k');
+
+% just drawing circular obstacles
+if isfield(S, 'os')
+  da = .1;
+  a = -da:da:2*pi;
+  for i=1:length(S.os)
+    % draw obstacle
+    plot(S.os(i).p(1) + cos(a)*S.os(i).r,  S.os(i).p(2) + sin(a)*S.os(i).r, ...
+         '-r','LineWidth',2);
+  end
+end
+
 xlabel('x')
 ylabel('y')
 legend('Ideal Trajectory', 'Actual Trajectory', 'Location', 'northwest');
 title('Ideal vs. Actual Trajectory')
+axis equal
 
 % compare the ideal and actual controls
 figure;
