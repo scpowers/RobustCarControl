@@ -73,13 +73,12 @@ S.umax = [pi/4, 1];
 
 % initial control sequence
 us = zeros(2,S.N);
-
+% resulting trajectory from this initial control sequence
 xs = ddp_traj(x0, us, S);
-
+% resulting total trajectory cost from this initial control sequence
 J_init = ddp_cost(xs, us,  S)
 
 subplot(1,2,1)
-
 plot(xs(1,:), xs(2,:), '-b')
 hold on
 
@@ -121,12 +120,19 @@ if isfield(S, 'ez')
             S.ez(i).coeffs(3)]*[xs(1,end);1]   ], '--r');
     end
 end
-% plot horizontal exclusion zone boundary
-if isfield(S, 'hez')
-    for i=1:length(S.hez)
-        plot([xs(1,1); xs(1,end)], S.hez(i).y*ones(2,1), '--r');
-    end
-end
+
+% show axle circles at start and end
+X = [xs(1,1); 
+    xs(1,1) + S.l*cos(xs(3,1));
+    xs(1,end); 
+    xs(1,end) + S.l*cos(xs(3,end))];
+Y = [xs(2,1); 
+    xs(2,1) + S.l*sin(xs(3,1));
+    xs(2,end); 
+    xs(2,end) + S.l*sin(xs(3,end))];
+R = S.circ_r*ones(4,1);
+viscircles([X Y], R, 'Color', 'k', 'LineStyle', '--');
+
 xlabel('x')
 ylabel('y')
 title('Trajectory Generation')
