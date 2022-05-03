@@ -117,7 +117,7 @@ if isfield(S, 'ez')
     for i=1:length(S.ez)
         plot([xs(1,1), xs(1,end)],[ -[S.ez(i).coeffs(1), ...
             S.ez(i).coeffs(3)]*[xs(1,1);1], -[S.ez(i).coeffs(1), ...
-            S.ez(i).coeffs(3)]*[xs(1,end);1]   ], '--r');
+            S.ez(i).coeffs(3)]*[xs(1,end);1] ], '--r');
     end
 end
 
@@ -349,7 +349,14 @@ w = [w1; w2];
 % k_eta must be at least k_noise, could be greater
 k_eta = 1*S.k_tot; 
 eta = k_eta*abs(v);
-u_v = (-eta/norm(w)) * w;
+% piecewise form of u_v to prevent chattering
+eps = 1e-4;
+if eta*norm(w) >= eps
+    u_v = (-eta/norm(w)) * w;
+else
+    u_v = -(eta)^2/eps * w;
+end
+
 
 u_aug = u_aug + u_v; % add disturbance rejection term
 
