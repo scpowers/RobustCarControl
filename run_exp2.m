@@ -59,10 +59,8 @@ S.os(1).r = 1;
 
 % define boundary lines of exclusion zones
 % takes the form [x, y, 1]*[coeffs] {sign} 0
-%S.ez(1).coeffs = [-0.3; 1; 5.5];
-%S.ez(1).sign = ">=";
-%S.ez(2).coeffs = [-0.5; 1; -7.5];
-%S.ez(2).sign = "<=";
+S.ez(1).coeffs = [-0.3; 1; 5.5];
+S.ez(1).sign = ">=";
 
 S.ko = 1e4; % coeff on cost associated with obstacle collision
 
@@ -115,9 +113,9 @@ plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
 % plot exclusion zone boundary
 if isfield(S, 'ez')
     for i=1:length(S.ez)
-        plot([xs(1,1), xs(1,end)],[ -[S.ez(i).coeffs(1), ...
+        plot([xs(1,1), xs(1,end)+S.l],[ -[S.ez(i).coeffs(1), ...
             S.ez(i).coeffs(3)]*[xs(1,1);1], -[S.ez(i).coeffs(1), ...
-            S.ez(i).coeffs(3)]*[xs(1,end);1] ], '--r');
+            S.ez(i).coeffs(3)]*[xs(1,end)+S.l;1] ], '--r');
     end
 end
 
@@ -261,6 +259,15 @@ if isfield(S, 'os')
     plot(S.os(i).p(1) + cos(a)*S.os(i).r,  S.os(i).p(2) + sin(a)*S.os(i).r, ...
          '-r','LineWidth',2);
   end
+end
+
+% plot exclusion zone boundary
+if isfield(S, 'ez')
+    for i=1:length(S.ez)
+        plot([xs(1,1), xs(1,end)+S.l],[ -[S.ez(i).coeffs(1), ...
+            S.ez(i).coeffs(3)]*[xs(1,1);1], -[S.ez(i).coeffs(1), ...
+            S.ez(i).coeffs(3)]*[xs(1,end)+S.l;1] ], '--r');
+    end
 end
 
 xlabel('x')
