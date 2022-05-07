@@ -8,10 +8,10 @@ function f = run_exp2()
 clc; clear variables; close all;
 
 %%%%%%%%%%%%%%%%%%%%%% Optimal Trajectory Generation %%%%%%%%%%%%%%%%%%%%%%
-% time horizon and segments
-tf = 20;
-S.N = 100;
-S.h = tf/S.N;
+% discretization parameters
+tf = 20; % time horizon
+S.N = 120; % number of control segments
+S.h = tf/S.N; % time step
 
 % car parameters
 S.l = 1; % distance between axles
@@ -20,18 +20,21 @@ S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 % generally: ||added noise|| <= S.k_tot*|velocity|
 % first noise coefficient: realistically adding noise to tan(u1). So, since
 % I'm limiting u1 to +- pi/4, the worst case difference in tan(u1) if you
-% have a 3 deg drift while moving at 60 mph is tan(45) - tan(42) = 0.099
-% because of the increasingly steep nature of the tangent function...but
-% to actually get the coefficient you'd divide 0.099 by 60 mph but in m/s
-% if you're moving slower and at a lower steering angle then the difference
-% will be smaller, so this is an upper bound.
-% second noise coefficient: adding noise directly to u2, so if you are
-% moving at 60 mph and wind drops your acceleration by 0.5 m/s^2, then the
-% upper bound coefficient is 0.0186 (because of conversion from mph to m/s)
-max_drift_deg = 3; % max noise in u1 (in degrees) at 60 mph or 26.8224 m/s
-max_drift_acc = 0.5; % max noise in u2 at 60 mph or 26.8224 m/s
-k_noise_u1 = (tand(45) - tand(45-max_drift_deg)) / 26.8224;
-k_noise_u2 = max_drift_acc / 26.8224;
+% have a 5 deg drift while moving at 60 mph at the max steering angle of 45
+% deg is tan(45) - tan(42) = 0.099 because of the increasingly steep nature 
+% of the tangent function...but to actually get the coefficient you'd 
+% divide 0.099 by (26.8224*(1+tan(45)/l) s.t. it provides an upper bound on
+% injected noise. If you're moving slower and at a lower steering angle 
+% then the difference will be smaller, so this is an upper bound.
+% Second noise coefficient: adding noise directly to u2, so if you are
+% moving at 60 mph at a steering angle of 45 deg and wind drops your 
+% acceleration by 1 m/s^2, then you'd divide 0.099 by ...
+% (26.8224*(1+tan(45)/l) to again get an upper bound. 
+max_drift_deg = 5; % max noise in u1 (in degrees) at 60 mph or 26.8224 m/s
+max_drift_acc = 1; % max noise in u2 at 60 mph or 26.8224 m/s
+k_noise_u1 = (tand(45) - tand(45-max_drift_deg)) / ...
+    (26.8224*(1+tand(45)/S.l));
+k_noise_u2 = max_drift_acc / (26.8224*(1+tand(45)/S.l));
 S.k_noise = [k_noise_u1; k_noise_u2];
 S.k_tot = norm(S.k_noise);
 
@@ -191,8 +194,9 @@ for i=start_index:S.N
     % add noise proportional to the car's velocity
     % such that ||delta|| <= S.k_tot*abs(velocity)
     % NOTE: u_noise = [tan(u1_noise); u2_noise]...not directly adding to u1
-    % general form: |v|*(random uniform number in [-k_i, k_i])
-    u_noise = abs(x_actual(4)) * ([-S.k_noise(1); -S.k_noise(2)] + ...
+    % general form: |v(1+K)|*(random uniform number in [-k_i, k_i])
+    u_noise = abs(x_actual(4,i)*(1+tan(x_actual(3,i)))) * ...
+        ([-S.k_noise(1); -S.k_noise(2)] + ...
         2*[S.k_noise(1), 0; 0, S.k_noise(2)] * rand(2,1));
     u_noise = [atan(u_noise(1)); u_noise(2)]; % switch back to [u1;u2]
     u = u + u_noise;
@@ -355,10 +359,10 @@ w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + ...
 w = [w1; w2];
 
 % k_eta must be at least k_noise, could be greater
-k_eta = 1*S.k_tot; 
+k_eta = 2*S.k_tot; 
 eta = k_eta*abs(v);
 % piecewise form of u_v to prevent chattering
-eps = 1e-4;
+eps = 1e-3;
 if eta*norm(w) >= eps
     u_v = (-eta/norm(w)) * w;
 else
