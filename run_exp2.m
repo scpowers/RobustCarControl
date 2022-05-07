@@ -76,7 +76,7 @@ xs = ddp_traj(x0, us, S);
 % resulting total trajectory cost from this initial control sequence
 J_init = ddp_cost(xs, us,  S)
 
-subplot(1,2,1)
+subplot(2,1,1)
 plot(xs(1,:), xs(2,:), '-b')
 hold on
 
@@ -138,9 +138,10 @@ title('Trajectory Generation')
 J = ddp_cost(xs, us, S) % final minimized cost
 
 % plot controls
-subplot(1,2,2)
+subplot(2,1,2)
 plot(0:S.h:tf-S.h, us(1,:),0:S.h:tf-S.h, us(2,:));
-xlabel('sec.')
+xlabel('t')
+ylabel('u')
 legend('u_1','u_2')
 title('Ideal Controls')
 
@@ -363,7 +364,6 @@ if eta*norm(w) >= eps
 else
     u_v = -(eta)^2/eps * w;
 end
-
 
 u_aug = u_aug + u_v; % add disturbance rejection term
 
