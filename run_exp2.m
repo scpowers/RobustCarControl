@@ -9,7 +9,7 @@ clc; clear variables; close all;
 
 %%%%%%%%%%%%%%%%%%%%%% Optimal Trajectory Generation %%%%%%%%%%%%%%%%%%%%%%
 % discretization parameters
-tf = 20; % time horizon
+tf = 15; % time horizon [sec]
 S.N = 120; % number of control segments
 S.h = tf/S.N; % time step
 
@@ -28,7 +28,7 @@ S.circ_r = 0.5; %radius of circle centered on each axle for collision model
 % then the difference will be smaller, so this is an upper bound.
 % Second noise coefficient: adding noise directly to u2, so if you are
 % moving at 60 mph at a steering angle of 45 deg and wind drops your 
-% acceleration by 1 m/s^2, then you'd divide 0.099 by ...
+% acceleration by 1 m/s^2, then you'd divide 1 by ...
 % (26.8224*(1+tan(45)/l) to again get an upper bound. 
 max_drift_deg = 5; % max noise in u1 (in degrees) at 60 mph or 26.8224 m/s
 max_drift_acc = 1; % max noise in u2 at 60 mph or 26.8224 m/s
@@ -80,7 +80,7 @@ xs = ddp_traj(x0, us, S);
 J_init = ddp_cost(xs, us,  S)
 
 subplot(2,1,1)
-plot(xs(1,:), xs(2,:), '-b')
+p1 = plot(xs(1,:), xs(2,:), '-b');
 hold on
 
 % just drawing circular obstacles
@@ -111,7 +111,8 @@ for i=1:50
 
   plot(xs(1,:), xs(2,:), '-b');
 end
-plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
+p2 = plot(xs(1,:), xs(2,:), '-g'); % plot final trajectory
+
 
 % plot exclusion zone boundary
 if isfield(S, 'ez')
@@ -137,8 +138,11 @@ viscircles([X Y], R, 'Color', 'k', 'LineStyle', '--');
 xlabel('x')
 ylabel('y')
 title('Trajectory Generation')
+legend([p1 p2], "Candidate Traj", "Optimal Traj", "Location", ...
+    "southeast");
 
-J = ddp_cost(xs, us, S) % final minimized cost
+Jf = ddp_cost(xs, us, S) % final minimized cost
+xd_error = abs(xs(:,end) - xd) % final error
 
 % plot controls
 subplot(2,1,2)
@@ -315,7 +319,7 @@ end
 function u = car_ctrl(x, S, i)
 %%%%%%%%%%% compute nominal (noiseless) control (psi in notes) %%%%%%%%%%%
 k1 = 1;
-k2 = 1;
+k2 = 2;
 
 % get info about the reference trajectory at this particular spot
 x_ref = S.xs(:,i);
@@ -359,7 +363,7 @@ w2 = (k1*(x(1)-x_ref(1)) - v_ref*cos(theta_ref) + ...
 w = [w1; w2];
 
 % k_eta must be at least k_noise, could be greater
-k_eta = 2*S.k_tot; 
+k_eta = 1*S.k_tot; 
 eta = k_eta*abs(v);
 % piecewise form of u_v to prevent chattering
 eps = 1e-3;
