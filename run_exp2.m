@@ -364,7 +364,7 @@ w = [w1; w2];
 
 % k_eta must be at least k_noise, could be greater
 k_eta = 1*S.k_tot; 
-eta = k_eta*abs(v);
+eta = k_eta*abs(v*(1+tan(theta)));
 % piecewise form of u_v to prevent chattering
 eps = 1e-3;
 if eta*norm(w) >= eps
